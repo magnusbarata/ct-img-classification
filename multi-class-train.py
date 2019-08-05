@@ -13,17 +13,6 @@ from models import testModel
 import pydicom as dcm
 import pickle
 
-"""def generator(flist, labels, batch_size, n_class):
-    b_features = np.zeros(shape=(batch_size, 512, 512, 1))
-    b_labels = np.zeros(shape=(batch_size, n_class))
-
-    while True:
-        for i in range(batch_size):
-            index = np.random.choice(len(flist), batch_size)
-            b_features[i] = features[index]
-            b_labels[i] = labels[index]
-        yield b_features, b_labels"""
-
 
 ## Read training data
 train_df = pd.read_csv('train_data_190703_checked.csv')

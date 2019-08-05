@@ -3,6 +3,18 @@ import numpy as np
 import keras
 from sklearn.preprocessing import MultiLabelBinarizer
 
+def generator(flist, labels, n_class, batch_size=32, dim=(512,512), n_channels=1):
+    'Simple generator function'
+    b_features = np.zeros(shape=(batch_size, *dim, n_channels))
+    b_labels = np.zeros(shape=batch_size)
+
+    while True:
+        for i in range(batch_size):
+            index = np.random.choice(len(flist), batch_size)
+            b_features[i] = features[index]
+            b_labels[i] = labels[index]
+        yield b_features, b_labels
+
 class DataGenerator(keras.utils.Sequence):
     'Generates data for Keras'
     def __init__(self, list_IDs, labels=None, batch_size=32, dim=(512,512), n_channels=1,
