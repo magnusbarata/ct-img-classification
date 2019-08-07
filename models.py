@@ -7,7 +7,7 @@ from keras.models import Model
 from keras.utils import plot_model
 
 class testModel:
-    def __init__(self, shape=(512, 512, 1), n_class=4, mode=None):
+    def __init__(self, shape=(512, 512, 1), n_class=4, multi=False):
         in_img = Input(shape=(512, 512, 1), dtype='float')
         conv = Conv2D(16, 3, activation='relu')(in_img)
         conv = Conv2D(16, 3, activation='relu')(conv)
@@ -28,7 +28,7 @@ class testModel:
         #GAP = GlobalAveragePooling2D()(conv)
         #FC = Dense(128, activation='relu')(GAP)
         flat = Flatten()(conv)
-        if mode is 'multi': out = Dense(n_class, activation='sigmoid')(flat)
+        if multi: out = Dense(n_class, activation='sigmoid')(flat)
         else: out = Dense(n_class, activation='softmax')(flat)
         self.model = Model(in_img, out)
 

@@ -79,6 +79,14 @@ map = {0:'CHST', 1:'ABDM', 2:'PELV', 3:'SHDR', 4:'NECK', 5:'HEAD'}
 y_pred = [map[i] for i in preds.argmax(axis=1)]
 y_true = [map[int(i)] for i in test_file[:,1]]
 confusion_matrix(y_true, y_pred, labels=['HEAD', 'NECK', 'SHDR', 'CHST', 'ABDM', 'PELV'])
+
+x = test_file[:, 0]
+np.where([test_file[:,1].astype(int) != preds.argmax(axis=1)])[1]
+y_true[745], y_pred[745]
+x[test_file[:,1].astype(int) != preds.argmax(axis=1)]
+#x[y_true != y_pred]
+#confusion_matrix(test_file[:,1].astype(int), preds.argmax(axis=1))
+
 """
 test_df = pd.read_csv('train_data_SEMAR_ON_edited.csv')
 test_df = test_df[~((test_df.Label=='PELVIS') | (test_df.Label=='HEAD') |

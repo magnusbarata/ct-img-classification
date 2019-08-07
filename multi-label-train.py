@@ -6,7 +6,6 @@ import numpy as np
 import pydicom as dcm
 import pickle
 import keras
-from keras_preprocessing.image import ImageDataGenerator
 from keras import optimizers
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import multilabel_confusion_matrix
@@ -35,7 +34,7 @@ shuffled_df.to_csv('shuffled.csv',index=False)"""
 
 ## Build model
 in_img = keras.layers.Input(shape=(512, 512, 1), dtype='float')
-net = testModel(n_class=gen_tr.n_class, mode='multi')
+net = testModel(n_class=gen_tr.n_class, multi=True)
 optimizer = optimizers.rmsprop(lr=1e-5, decay=1e-6)
 net.model.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['accuracy'])
 #plot_model(net.model, to_file='model.png')
