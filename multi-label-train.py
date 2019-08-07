@@ -4,7 +4,6 @@ import sys
 import pandas as pd
 import numpy as np
 import pydicom as dcm
-import pickle
 import keras
 from keras import optimizers
 from sklearn.model_selection import train_test_split
@@ -45,13 +44,13 @@ chkpoint = keras.callbacks.ModelCheckpoint(weight_f, save_weights_only=True, per
 logger = keras.callbacks.CSVLogger('loss_file.csv')
 net.model.fit_generator(gen_tr, validation_data=gen_val, epochs=100, verbose=1, use_multiprocessing=True, workers=4, callbacks=[chkpoint, logger])"""
 
-## Predict output
+## Evaluate model
 net.model.load_weights('weights/190805_190726_multi_TestModel_20.h5')
 gen_ts = DataGenerator(X_ts, batch_size=16, shuffle=False)
 preds = net.model.predict_generator(gen_ts, use_multiprocessing=True, verbose=1)
 preds_bool = (preds > 0.5)
 eval = multilabel_confusion_matrix(gen_tr.mlb.transform(y_ts), preds_bool.astype(int), samplewise=True)
-np.where(eval[:,0,0]+eval[:,1,1] != gen_tr.n_class)
+np.where(eval[:,0,0]+eval[:,1,1] != gen_tr.n_class)[0]
 X_ts[(eval[:,0,1] != 0) | (eval[:,1,0] != 0)]
 
 class_dict = dict((i,v) for i, v in enumerate(gen_tr.classes))
