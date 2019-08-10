@@ -53,11 +53,11 @@ eval = multilabel_confusion_matrix(gen_tr.mlb.transform(y_ts), preds_bool.astype
 np.where(eval[:,0,0]+eval[:,1,1] != gen_tr.n_class)[0]
 X_ts[(eval[:,0,1] != 0) | (eval[:,1,0] != 0)]
 
-class_dict = dict((i,v) for i, v in enumerate(gen_tr.classes))
 prediction = []
 for sample in preds_bool:
-    l = [class_dict[i] for i, v in enumerate(sample) if v]
-    prediction.append(','.join(l))
+    l = [gen_tr.classes[i] for i, v in enumerate(sample) if v]
+    if len(l) > 0: prediction.append(','.join(l))
+    else: prediction.append('unkw')
 
 results = pd.DataFrame({'Fpath':X_ts, 'Truth':y_ts, 'Predict':prediction})
 results.to_csv('results.csv',index=False)
