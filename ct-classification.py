@@ -10,6 +10,7 @@ from models import testModel
 
 """ TODO
  - Options: file format, model selector (from json), weight selector
+ - Multiple label case
  - Outlier
  - Ordering
 """
