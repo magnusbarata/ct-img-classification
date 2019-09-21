@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import time, datetime
 import argparse
 import pandas as pd
 import numpy as np
@@ -13,15 +14,17 @@ from models import mclass2mlabel
 from keras.utils import plot_model
 
 def save_shuffled_df(train, val, test):
-    """joined = np.vstack((np.vstack((X_tr, y_tr)).T, np.vstack((X_val, y_val)).T, np.vstack((X_ts, y_ts)).T))
+    if val is not None:
+        joined = np.vstack((np.hstack((train[0], val[0], test[0])), np.hstack((train[1], val[1], test[1])))).T
+    else:
+        joined = np.vstack((np.hstack((train[0], test[0])), np.hstack((train[1], test[1])))).T
     shuffled_df = pd.DataFrame(data={'Fpath': joined[:,0], 'Labels': joined[:,1]})
-    shuffled_df.to_csv('shuffled.csv',index=False)"""
-    return None
+    shuffled_df.to_csv('shuffled.csv',index=False)
 
 def main(args):
     ## Data prep
     seed = args.seed
-    df = pd.read_csv('train_data_190726.csv', usecols=['Fpath', 'Labels'])
+    df = pd.read_csv(args.data, usecols=['Fpath', 'Labels'])
     df = df[~((df.Labels=='unkw') | (df.Labels=='leg'))] # shape: (8785, 2)
     df['Labels'] = df['Labels'].apply(lambda x:x.split(';'))
     X, y = df.Fpath.values, df.Labels.values
@@ -32,21 +35,28 @@ def main(args):
                   'n_channels':1, 'multi': True}
     gen_tr = DataGenerator(X_tr, y_tr, **gen_params)
     gen_val = DataGenerator(X_val, y_val, **gen_params)
-    #save_shuffled_df()
+    #save_shuffled_df((X_tr,y_tr), (X_val,y_val), (X_ts,y_ts))
 
     ## Build model
-    model = mclass2mlabel(keras.applications.inception_v3.InceptionV3(weights=None, input_shape=(512,512,1)), n_class=gen_tr.n_class)
-    #model = testModel(n_class=gen_tr.n_class, multi=True).model
+    if args.model == 'TestModel': model = testModel(n_class=gen_tr.n_class, multi=True).model
+    elif args.model == 'InceptionV3': model = mclass2mlabel(keras.applications.inception_v3.InceptionV3(weights=None, input_shape=(512,512,1)), n_class=gen_tr.n_class)
+    elif args.model == 'Xception': model = mclass2mlabel(keras.applications.xception.Xception(weights=None, input_shape=(512,512,1)), n_class=gen_tr.n_class)
+    elif args.model == 'MobileNetV2': model = mclass2mlabel(keras.applications.mobilenet_v2.MobileNetV2(weights=None, input_shape=(512,512,1)), n_class=gen_tr.n_class)
+    elif args.model == 'InceptionResNetV2': model = mclass2mlabel(keras.applications.inception_resnet_v2.InceptionResNetV2(weights=None, input_shape=(512,512,1)), n_class=gen_tr.n_class)
+    else: print('Unknown model is selected.'); return()
     optimizer = optimizers.rmsprop(lr=1e-5, decay=1e-6)
     model.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['accuracy'])
     #model.summary()
     #plot_model(model, to_file=model.name+'.png')
 
     if args.train:
-        weight_f = 'weights/190921_190726_multi_' + model.name + '_{epoch:02d}.h5' # weights/{train_date}_{data_date}_multi_{model.name}_{epoch:02d}.h5'
+        train_date = ''.join(str(datetime.date.today())[2:].split('-'))
+        weight_f = 'weights/' + train_date + '_' + args.date[-10:-4] + '_multi_' + model.name + '_{epoch:02d}.h5'
         chkpoint = keras.callbacks.ModelCheckpoint(weight_f, save_weights_only=True, period=20)
         logger = keras.callbacks.CSVLogger('loss_file.csv')
+        start_time = time.time()
         model.fit_generator(gen_tr, validation_data=gen_val, epochs=100, verbose=1, use_multiprocessing=True, workers=4, callbacks=[chkpoint, logger])
+        print('Elapsed time: ', datetime.timedelta(seconds=time.time()-start_time))
 
     if args.eval:
         model.load_weights(args.weight)
@@ -63,15 +73,16 @@ def main(args):
             if len(l) > 0: prediction.append(','.join(l))
             else: prediction.append('unkw')
 
-            results = pd.DataFrame({'Fpath':X_ts, 'Truth':y_ts, 'Predict':prediction})
-            results.to_csv('results.csv',index=False)
+        results = pd.DataFrame({'Fpath':X_ts, 'Truth':y_ts, 'Predict':prediction})
+        results.to_csv('results.csv',index=False)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--seed', default=42)
     parser.add_argument('--train', action='store_true')
     parser.add_argument('--eval', action='store_true')
-    parser.add_argument('--data', default=None)
-    parser.add_argument('--model', default=None)
+    parser.add_argument('--data', default='train_data_190726.csv')
+    parser.add_argument('--epochs', default=100)
+    parser.add_argument('--model', default='TestModel')
     parser.add_argument('--weight', default='weights/190805_190726_multi_TestModel_20.h5')
     main(parser.parse_args())
