@@ -6,6 +6,10 @@ from keras.layers import Input, Conv2D, Dense, Concatenate, Flatten, Add,\
 from keras.models import Model
 from keras.utils import plot_model
 
+def mclass2mlabel(model, n_class=4):
+    out = Dense(n_class, activation='sigmoid')(model.layers[-2].output)
+    return Model(model.input, out, name=model.name+'_multilabel')
+
 class testModel:
     def __init__(self, shape=(512, 512, 1), n_class=4, multi=False):
         in_img = Input(shape=(512, 512, 1), dtype='float')
@@ -30,7 +34,7 @@ class testModel:
         flat = Flatten()(conv)
         if multi: out = Dense(n_class, activation='sigmoid')(flat)
         else: out = Dense(n_class, activation='softmax')(flat)
-        self.model = Model(in_img, out)
+        self.model = Model(in_img, out, name='TestModel')
 
     def inceptionModuleA(self, conv, n_convs, mod_num):
         name = 'modA' + str(mod_num)
