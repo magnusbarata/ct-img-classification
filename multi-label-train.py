@@ -39,11 +39,11 @@ def main(args):
     #model = testModel(n_class=gen_tr.n_class, multi=True).model
     optimizer = optimizers.rmsprop(lr=1e-5, decay=1e-6)
     model.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['accuracy'])
-    model.summary()
-    plot_model(model, to_file=model.name+'.png')
+    #model.summary()
+    #plot_model(model, to_file=model.name+'.png')
 
     if args.train:
-        weight_f = 'weights/190921_190726_multi_TestModel_{epoch:02d}.h5' # weights/{train_date}_{data_date}_multi_{model.name}_{epoch:02d}.h5'
+        weight_f = 'weights/190921_190726_multi_' + model.name + '_{epoch:02d}.h5' # weights/{train_date}_{data_date}_multi_{model.name}_{epoch:02d}.h5'
         chkpoint = keras.callbacks.ModelCheckpoint(weight_f, save_weights_only=True, period=20)
         logger = keras.callbacks.CSVLogger('loss_file.csv')
         model.fit_generator(gen_tr, validation_data=gen_val, epochs=100, verbose=1, use_multiprocessing=True, workers=4, callbacks=[chkpoint, logger])

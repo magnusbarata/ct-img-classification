@@ -14,7 +14,9 @@ def main(args):
         if args.dir is None: save_path = 'LABELED_' + os.path.dirname(f)
         else: save_path = os.path.join(args.dir, os.path.dirname(f))
 
-        if not os.path.exists(save_path): os.makedirs(save_path)
+        if not os.path.exists(save_path):
+            print('labelling files on [%s]...' % save_path)
+            os.makedirs(save_path)
         ds.save_as(os.path.join(save_path, os.path.basename(f)))
 
 
