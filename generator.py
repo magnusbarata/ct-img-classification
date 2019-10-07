@@ -3,6 +3,22 @@ import numpy as np
 import keras
 from sklearn.preprocessing import MultiLabelBinarizer
 
+def generator(list_IDs, labels=None, n_class=10, batch_size=32, dim=(512,512), n_channels=1):
+    'Simple generator function for multi-class classification'
+    b_features = np.zeros(shape=(batch_size, *dim, n_channels))
+    b_labels = [None] * batch_size
+
+    while True:
+        indices = np.random.choice(len(list_IDs), batch_size)
+        for i, index in enumerate(indices):
+            ds = dcm.dcmread(list_IDs[index])
+            pixel_array = ds.pixel_array
+            b_features[i] = pixel_array.reshape(pixel_array.shape+(n_channels,))
+            if labels is not None: b_labels[i] = labels[index]
+
+        if labels is None: yield b_features
+        else: yield b_features, keras.utils.to_categorical(b_labels, n_class)
+
 class DataGenerator(keras.utils.Sequence):
     'Generates data for Keras'
     def __init__(self, list_IDs, labels=None, batch_size=32, dim=(512,512), n_channels=1,
