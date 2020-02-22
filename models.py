@@ -1,198 +1,127 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 import keras
-from keras.layers import Input, Conv2D, Dense, Concatenate, Flatten, Add,\
-                         MaxPooling2D, AveragePooling2D, GlobalAveragePooling2D,\
-                         Activation, BatchNormalization
+from keras.layers import *
 from keras.models import Model
-from keras.utils import plot_model
 
-def mclass2mlabel(model, n_class=4):
-    out = Dense(n_class, activation='sigmoid')(model.layers[-2].output)
-    return Model(model.input, out, name=model.name+'_multilabel')
-
-def conv2d_bn(x, filters, kernel_size, padding='same', activation='relu', dilation_rate=(1, 1), name=None):
+def conv2d_bn(x, filters, kernel_size, strides=1, padding='same', activation='elu', dilation_rate=(1, 1), use_bias=False, type='separable', name=None):
     if name is None: bn_name = conv_name = name
     else:
         bn_name = name + '_bn'
         conv_name = name + '_conv'
 
-    if keras.backend.image_data_format() == 'channels_first': bn_axis = 1
-    else: bn_axis = 3
-
-    x = Conv2D(filters, kernel_size, padding=padding, use_bias=False, dilation_rate=dilation_rate, name=conv_name)(x)
-    x = BatchNormalization(axis=bn_axis, scale=False, name=bn_name)(x)
-    x = Activation(activation, name=name)(x)
+    if type == 'separable':
+        x = SeparableConv2D(filters, kernel_size, strides=strides, padding=padding, use_bias=use_bias, dilation_rate=dilation_rate, name=conv_name)(x)
+    else:
+        x = Conv2D(filters, kernel_size, strides=strides, padding=padding, use_bias=use_bias, dilation_rate=dilation_rate, name=conv_name)(x)
+    if not use_bias:
+        bn_axis = 1 if keras.backend.image_data_format() == 'channels_first' else 3
+        x = BatchNormalization(axis=bn_axis, scale=False, name=bn_name)(x)
+    if activation is not None: x = Activation(activation, name=name)(x)
     return x
 
-class testModelV2:
-    def __init__(self, shape=(512, 512, 1), n_class=4, multi=False):
-        in_img = Input(shape=(512, 512, 1), dtype='float')
-        conv = conv2d_bn(in_img, 16, 3, activation='relu')
-        conv = conv2d_bn(conv, 16, 3, activation='relu')
-        conv = MaxPooling2D(3, 2)(conv)
+def mclass2mlabel(model, n_class=4, flatten=False):
+    if flatten: x = Flatten()(model.layers[-2].output)
+    else: x = model.layers[-2].output
+    out = Dense(n_class, activation='sigmoid')(x)
+    return Model(model.input, out, name=model.name+'_multilabel')
+
+class testModelV3:
+    """testModelV3."""
+
+    def __init__(self, shape=(512,512,1), n_class=4, multi=False):
+        in_img = Input(shape=shape, dtype='float')
+        x = conv2d_bn(in_img, 10, 1, type='normal')
+        x = conv2d_bn(x, 16, 3, type='normal')
+        x = conv2d_bn(x, 16, 3, type='normal')
+        x = MaxPooling2D(3, 2)(x)
+
+        x = self.inceptionModuleX(x, 32, 3, 1)
+        x = MaxPooling2D(3, 2)(x)
+        for i in range(3):
+            x = self.inceptionResNetA(x, 64, 1., i)
+        x = self.inceptionModuleX(x, 64, 3, 2)
+        x = MaxPooling2D(3, 2)(x)
 
         for i in range(3):
-            conv = self.inceptionModuleX(conv, 16*(i+1), 3, i)
-            conv = self.inceptionModuleA(conv, 16*(i+1), i)
-            conv = self.inceptionModuleB(conv, 16*(i+1), 7, i)
-            conv = self.inceptionModuleC(conv, 16*(i+1), i)
-            conv = MaxPooling2D(3, 2)(conv)
-
-        #GAP = GlobalAveragePooling2D()(conv)
-        #FC = Dense(128, activation='relu')(GAP)
-        flat = Flatten()(conv)
-        if multi: out = Dense(n_class, activation='sigmoid')(flat)
-        else: out = Dense(n_class, activation='softmax')(flat)
-        self.model = Model(in_img, out, name='TestModelV2')
-
-    def inceptionModuleA(self, conv, n_convs, mod_num):
-        name = 'modA' + str(mod_num)
-        branch1 = conv2d_bn(conv, n_convs, 1, activation='relu', name=name+'-1x1')
-
-        branch2 = conv2d_bn(conv, n_convs, 1, activation='relu', name=name+'br2-1x1')
-        branch2 = conv2d_bn(branch2, n_convs, 3, activation='relu', padding='same', name=name+'br2-3x3_1')
-        branch2 = conv2d_bn(branch2, n_convs, 3, activation='relu', padding='same', name=name+'br2-3x3_2')
-
-        branch3 = conv2d_bn(conv, n_convs, 1, activation='relu', name=name+'br3-1x1')
-        branch3 = conv2d_bn(branch3, n_convs, 3, activation='relu', padding='same', name=name+'br3-3x3')
-
-        branch4 = AveragePooling2D(2, 1, name=name+'br4-AvgPool', padding='same')(conv)
-        branch4 = conv2d_bn(branch4, n_convs, 1, activation='relu', name=name+'br4-1x1')
-        return Concatenate(name=name+'_cat')([branch1, branch2, branch3, branch4])
-
-    def inceptionModuleB(self, conv, n_convs, kernel_size, mod_num):
-        name = 'modB' + str(mod_num)
-        branch1 = conv2d_bn(conv, n_convs, 1, activation='relu', name=name+'-1x1')
-
-        branch2 = conv2d_bn(conv, n_convs, 1, activation='relu', name=name+'br2-1x1')
-        branch2 = conv2d_bn(branch2, n_convs, (1, kernel_size), activation='relu', padding='same', name=name+'br2-1xn_1')
-        branch2 = conv2d_bn(branch2, n_convs, (kernel_size, 1), activation='relu', padding='same', name=name+'br2-nx1_1')
-        branch2 = conv2d_bn(branch2, n_convs, (1, kernel_size), activation='relu', padding='same', name=name+'br2-1xn_2')
-        branch2 = conv2d_bn(branch2, n_convs, (kernel_size, 1), activation='relu', padding='same', name=name+'br2-nx1_2')
-
-        branch3 = conv2d_bn(conv, n_convs, 1, activation='relu', name=name+'br3-1x1')
-        branch3 = conv2d_bn(branch3, n_convs, (1, kernel_size), activation='relu', padding='same', name=name+'br3-1xn')
-        branch3 = conv2d_bn(branch3, n_convs, (kernel_size, 1), activation='relu', padding='same', name=name+'br3-nx1')
-
-        branch4 = AveragePooling2D(2, 1, name=name+'br4-AvgPool', padding='same')(conv)
-        branch4 = conv2d_bn(branch4, n_convs, 1, activation='relu', name=name+'br4-1x1')
-        return Concatenate(name=name+'_cat')([branch1, branch2, branch3, branch4])
-
-    def inceptionModuleC(self, conv, n_convs, mod_num):
-        name = 'modC' + str(mod_num)
-        branch1 = conv2d_bn(conv, n_convs, 1, activation='relu', name=name+'-1x1')
-
-        branch2 = conv2d_bn(conv, n_convs, 1, activation='relu', name=name+'br2-1x1')
-        branch2 = conv2d_bn(branch2, n_convs, 3, activation='relu', padding='same', name=name+'br2-3x3')
-        branch2a = conv2d_bn(branch2, n_convs, (1, 3), activation='relu', padding='same', name=name+'br2-1x3')
-        branch2b = conv2d_bn(branch2, n_convs, (3, 1), activation='relu', padding='same', name=name+'br2-3x1')
-
-        branch3 = conv2d_bn(conv, n_convs, 1, activation='relu', name=name+'br3-1x1')
-        branch3a = conv2d_bn(branch3, n_convs, (1, 3), activation='relu', padding='same', name=name+'br3-1x3')
-        branch3b = conv2d_bn(branch3, n_convs, (3, 1), activation='relu', padding='same', name=name+'br3-3x1')
-
-        branch4 = AveragePooling2D(2, 1, name=name+'br4-AvgPool', padding='same')(conv)
-        branch4 = conv2d_bn(branch4, n_convs, 1, activation='relu', name=name+'br4-1x1')
-        return Concatenate(name=name+'_cat')([branch1, branch2a, branch2b, branch3a, branch3b, branch4])
-
-    def inceptionModuleX(self, conv, n_convs, kernel_size, mod_num):
-        name = 'modX' + str(mod_num)
-        branch1 = conv2d_bn(conv, n_convs, 3, activation='relu', dilation_rate=6, padding='same', name=name+'_r6')
-        branch2 = conv2d_bn(conv, n_convs, 3, activation='relu', dilation_rate=12, padding='same', name=name+'_r12')
-        branch3 = conv2d_bn(conv, n_convs, 3, activation='relu', dilation_rate=18, padding='same', name=name+'_r18')
-        branch4 = conv2d_bn(conv, n_convs, 3, activation='relu', dilation_rate=24, padding='same', name=name+'_r24')
-
-        return Concatenate(name=name+'_cat')([branch1, branch2, branch3, branch4])
-
-class testModel:
-    def __init__(self, shape=(512, 512, 1), n_class=4, multi=False):
-        in_img = Input(shape=(512, 512, 1), dtype='float')
-        conv = Conv2D(16, 3, activation='relu')(in_img)
-        conv = Conv2D(16, 3, activation='relu')(conv)
-        conv = MaxPooling2D(3, 2)(conv)
-
-        conv = self.inceptionModuleX(conv, 32, 3, 1)
-        conv = MaxPooling2D(3, 2)(conv)
-        for i in range(5):
-            conv = self.inceptionModuleA(conv, 64, i)
-        conv = MaxPooling2D(3, 2)(conv)
+            x = self.inceptionResNetB(x, 64, 7, 1., i)
+        x = self.inceptionModuleX(x, 64, 3, 3)
+        x = MaxPooling2D(3, 2)(x)
 
         for i in range(3):
-            conv = self.inceptionModuleB(conv, 64, 7, i)
-        conv = MaxPooling2D(3, 2)(conv)
+            x = self.inceptionResNetC(x, 128, 1., i)
 
-        conv = self.inceptionModuleC(conv, 64, 1)
-        conv = self.inceptionModuleC(conv, 64, 2)
-        #GAP = GlobalAveragePooling2D()(conv)
-        #FC = Dense(128, activation='relu')(GAP)
-        flat = Flatten()(conv)
-        if multi: out = Dense(n_class, activation='sigmoid')(flat)
-        else: out = Dense(n_class, activation='softmax')(flat)
-        self.model = Model(in_img, out, name='TestModel')
+        x = GlobalAveragePooling2D()(x)
+        #x = Flatten()(x)
+        if multi: out = Dense(n_class, activation='sigmoid')(x)
+        else: out = Dense(n_class, activation='softmax')(x)
+        self.model = Model(in_img, out, name='TestModelV3')
 
-    def inceptionModuleA(self, conv, n_convs, mod_num):
+    def inceptionResNetA(self, x, n_convs, scale, mod_num, activation='elu'):
         name = 'modA' + str(mod_num)
-        branch1 = Conv2D(n_convs, 1, activation='relu', name=name+'-1x1')(conv)
+        branch1 = conv2d_bn(x, n_convs, 1, name=name+'-1x1')
 
-        branch2 = Conv2D(n_convs, 1, activation='relu', name=name+'br2-1x1')(conv)
-        branch2 = Conv2D(n_convs, 3, activation='relu', padding='same', name=name+'br2-3x3_1')(branch2)
-        branch2 = Conv2D(n_convs, 3, activation='relu', padding='same', name=name+'br2-3x3_2')(branch2)
+        branch2 = conv2d_bn(x, n_convs, 1, name=name+'br2-1x1')
+        branch2 = conv2d_bn(branch2, n_convs, 3, name=name+'br2-3x3_1')
+        branch2 = conv2d_bn(branch2, n_convs, 3, name=name+'br2-3x3_2')
 
-        branch3 = Conv2D(n_convs, 1, activation='relu', name=name+'br3-1x1')(conv)
-        branch3 = Conv2D(n_convs, 3, activation='relu', padding='same', name=name+'br3-3x3')(branch3)
+        branch3 = conv2d_bn(x, n_convs, 1, name=name+'br3-1x1')
+        branch3 = conv2d_bn(branch3, n_convs, 3, name=name+'br3-3x3')
 
-        branch4 = AveragePooling2D(2, 1, name=name+'br4-AvgPool', padding='same')(conv)
-        branch4 = Conv2D(n_convs, 1, activation='relu', name=name+'br4-1x1')(branch4)
-        return Concatenate(name=name+'_cat')([branch1, branch2, branch3, branch4])
+        channel_axis = 1 if keras.backend.image_data_format() == 'channels_first' else 3
+        concat = Concatenate(axis=channel_axis, name=name+'_cat')([branch1, branch2, branch3])
+        residual = conv2d_bn(concat, keras.backend.int_shape(x)[channel_axis], 1, activation=None, use_bias=True, type='normal')
+        x = Lambda(lambda inputs, scale: inputs[0] + inputs[1] * scale,
+                   output_shape=keras.backend.int_shape(x)[1:],
+                   arguments={'scale': scale})([x, residual])
+        return Activation(activation)(x) if activation is not None else x
 
-    def inceptionModuleB(self, conv, n_convs, kernel_size, mod_num):
+    def inceptionResNetB(self, x, n_convs, kernel_size, scale, mod_num, activation='elu'):
         name = 'modB' + str(mod_num)
-        branch1 = Conv2D(n_convs, 1, activation='relu', name=name+'-1x1')(conv)
+        branch1 = conv2d_bn(x, n_convs, 1, name=name+'-1x1')
 
-        branch2 = Conv2D(n_convs, 1, activation='relu', name=name+'br2-1x1')(conv)
-        branch2 = Conv2D(n_convs, (1, kernel_size), activation='relu', padding='same', name=name+'br2-1xn_1')(branch2)
-        branch2 = Conv2D(n_convs, (kernel_size, 1), activation='relu', padding='same', name=name+'br2-nx1_1')(branch2)
-        branch2 = Conv2D(n_convs, (1, kernel_size), activation='relu', padding='same', name=name+'br2-1xn_2')(branch2)
-        branch2 = Conv2D(n_convs, (kernel_size, 1), activation='relu', padding='same', name=name+'br2-nx1_2')(branch2)
+        branch2 = conv2d_bn(x, n_convs, 1, name=name+'br2-1x1')
+        branch2 = conv2d_bn(branch2, n_convs, (1, kernel_size), name=name+'br2-1xn_1')
+        branch2 = conv2d_bn(branch2, n_convs, (kernel_size, 1), name=name+'br2-nx1_1')
+        branch2 = conv2d_bn(branch2, n_convs, (1, kernel_size), name=name+'br2-1xn_2')
+        branch2 = conv2d_bn(branch2, n_convs, (kernel_size, 1), name=name+'br2-nx1_2')
 
-        branch3 = Conv2D(n_convs, 1, activation='relu', name=name+'br3-1x1')(conv)
-        branch3 = Conv2D(n_convs, (1, kernel_size), activation='relu', padding='same', name=name+'br3-1xn')(branch3)
-        branch3 = Conv2D(n_convs, (kernel_size, 1), activation='relu', padding='same', name=name+'br3-nx1')(branch3)
+        branch3 = conv2d_bn(x, n_convs, 1, name=name+'br3-1x1')
+        branch3 = conv2d_bn(branch3, n_convs, (1, kernel_size), name=name+'br3-1xn')
+        branch3 = conv2d_bn(branch3, n_convs, (kernel_size, 1), name=name+'br3-nx1')
 
-        branch4 = AveragePooling2D(2, 1, name=name+'br4-AvgPool', padding='same')(conv)
-        branch4 = Conv2D(n_convs, 1, activation='relu', name=name+'br4-1x1')(branch4)
-        return Concatenate(name=name+'_cat')([branch1, branch2, branch3, branch4])
+        channel_axis = 1 if keras.backend.image_data_format() == 'channels_first' else 3
+        concat = Concatenate(axis=channel_axis, name=name+'_cat')([branch1, branch2, branch3])
+        residual = conv2d_bn(concat, keras.backend.int_shape(x)[channel_axis], 1, activation=None, use_bias=True, type='normal')
+        x = Lambda(lambda inputs, scale: inputs[0] + inputs[1] * scale,
+                   output_shape=keras.backend.int_shape(x)[1:],
+                   arguments={'scale': scale})([x, residual])
+        return Activation(activation)(x) if activation is not None else x
 
-    def inceptionModuleC(self, conv, n_convs, mod_num):
+    def inceptionResNetC(self, x, n_convs, scale, mod_num, activation='elu'):
         name = 'modC' + str(mod_num)
-        branch1 = Conv2D(n_convs, 1, activation='relu', name=name+'-1x1')(conv)
+        branch1 = conv2d_bn(x, n_convs, 1, name=name+'-1x1')
 
-        branch2 = Conv2D(n_convs, 1, activation='relu', name=name+'br2-1x1')(conv)
-        branch2 = Conv2D(n_convs, 3, activation='relu', padding='same', name=name+'br2-3x3')(branch2)
-        branch2a = Conv2D(n_convs, (1, 3), activation='relu', padding='same', name=name+'br2-1x3')(branch2)
-        branch2b = Conv2D(n_convs, (3, 1), activation='relu', padding='same', name=name+'br2-3x1')(branch2)
+        branch2 = conv2d_bn(x, n_convs, 1, name=name+'br2-1x1')
+        branch2 = conv2d_bn(branch2, n_convs, 3, name=name+'br2-3x3')
+        branch2a = conv2d_bn(branch2, n_convs, (1, 3), name=name+'br2-1x3')
+        branch2b = conv2d_bn(branch2, n_convs, (3, 1), name=name+'br2-3x1')
 
-        branch3 = Conv2D(n_convs, 1, activation='relu', name=name+'br3-1x1')(conv)
-        branch3a = Conv2D(n_convs, (1, 3), activation='relu', padding='same', name=name+'br3-1x3')(branch3)
-        branch3b = Conv2D(n_convs, (3, 1), activation='relu', padding='same', name=name+'br3-3x1')(branch3)
+        branch3 = conv2d_bn(x, n_convs, 1, name=name+'br3-1x1')
+        branch3a = conv2d_bn(branch3, n_convs, (1, 3), name=name+'br3-1x3')
+        branch3b = conv2d_bn(branch3, n_convs, (3, 1), name=name+'br3-3x1')
 
-        branch4 = AveragePooling2D(2, 1, name=name+'br4-AvgPool', padding='same')(conv)
-        branch4 = Conv2D(n_convs, 1, activation='relu', name=name+'br4-1x1')(branch4)
-        return Concatenate(name=name+'_cat')([branch1, branch2a, branch2b, branch3a, branch3b, branch4])
+        channel_axis = 1 if keras.backend.image_data_format() == 'channels_first' else 3
+        concat = Concatenate(axis=channel_axis, name=name+'_cat')([branch1, branch2a, branch2b, branch3a, branch3b])
+        residual = conv2d_bn(concat, keras.backend.int_shape(x)[channel_axis], 1, activation=None, use_bias=True, type='normal')
+        x = Lambda(lambda inputs, scale: inputs[0] + inputs[1] * scale,
+                   output_shape=keras.backend.int_shape(x)[1:],
+                   arguments={'scale': scale})([x, residual])
+        return Activation(activation)(x) if activation is not None else x
 
-    def inceptionModuleX(self, conv, n_convs, kernel_size, mod_num):
+    def inceptionModuleX(self, x, n_convs, kernel_size, mod_num):
         name = 'modX' + str(mod_num)
-        branch1 = Conv2D(n_convs, 3, activation='relu', dilation_rate=6, padding='same', name=name+'_r6')(conv)
-        branch2 = Conv2D(n_convs, 3, activation='relu', dilation_rate=12, padding='same', name=name+'_r12')(conv)
-        branch3 = Conv2D(n_convs, 3, activation='relu', dilation_rate=18, padding='same', name=name+'_r18')(conv)
-        branch4 = Conv2D(n_convs, 3, activation='relu', dilation_rate=24, padding='same', name=name+'_r24')(conv)
+        branch1 = conv2d_bn(x, n_convs, 3, dilation_rate=6, name=name+'_r6')
+        branch2 = conv2d_bn(x, n_convs, 3, dilation_rate=12, name=name+'_r12')
+        branch3 = conv2d_bn(x, n_convs, 3, dilation_rate=18, name=name+'_r18')
+        branch4 = conv2d_bn(x, n_convs, 3, dilation_rate=24, name=name+'_r24')
 
         return Concatenate(name=name+'_cat')([branch1, branch2, branch3, branch4])
-
-
-"""net = testModel()
-model = net.model
-model.compile(loss='categorical_crossentropy', optimizer='adam')
-model.summary()
-plot_model(model, to_file='model.png')"""

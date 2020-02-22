@@ -7,7 +7,6 @@ import numpy as np
 import pydicom as dcm
 import pandas as pd
 from generator import DataGenerator
-from models import testModel
 
 """ TODO
  - Options: file format, model selector (from json), weight selector
@@ -40,9 +39,8 @@ def main(args):
     files = [f for f in glob.glob(args.dir + '**/*.DCM', recursive=True)]
     print('Found %d file(s) from [%s].' %(len(files), args.dir))
 
-    net = testModel(n_class=5, multi=True)
-    net.model.load_weights('weights/190805_190726_multi_TestModel_20.h5')
-    preds_bool = imgPredict(files, net.model)
+    model = keras.models.load_model('InceptionResNetV2_aug_EXP/model.h5')
+    preds_bool = imgPredict(files, model)
     if write is not None: write(args.write, files, preds_bool)
 
     c_found = [(CLASSES[i], s) for i, s in enumerate(np.sum(preds_bool,axis=0)) if s > THRESHOLD]
